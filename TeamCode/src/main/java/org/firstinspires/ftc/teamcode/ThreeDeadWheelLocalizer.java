@@ -4,7 +4,9 @@ import com.acmerobotics.dashboard.config.Config;
 import com.acmerobotics.roadrunner.DualNum;
 import com.acmerobotics.roadrunner.Pose2d;
 import com.acmerobotics.roadrunner.PoseVelocity2d;
+import com.acmerobotics.roadrunner.Rotation2d;
 import com.acmerobotics.roadrunner.Time;
+import com.acmerobotics.roadrunner.Twist2d;
 import com.acmerobotics.roadrunner.Twist2dDual;
 import com.acmerobotics.roadrunner.Vector2d;
 import com.acmerobotics.roadrunner.Vector2dDual;
@@ -21,9 +23,9 @@ import org.firstinspires.ftc.teamcode.messages.ThreeDeadWheelInputsMessage;
 @Config
 public final class ThreeDeadWheelLocalizer implements Localizer {
     public static class Params {
-        public double par0YTicks = 0.0; // y position of the first parallel encoder (in tick units)
-        public double par1YTicks = 1.0; // y position of the second parallel encoder (in tick units)
-        public double perpXTicks = 0.0; // x position of the perpendicular encoder (in tick units)
+        public double par0Y = 6.75; // y position of the first parallel encoder (in inches)
+        public double par1Y = -6.75; // y position of the second parallel encoder (in inches)
+        public double perpX = -6.0; // x position of the perpendicular encoder (in inches)
     }
 
     public static Params PARAMS = new Params();
@@ -31,15 +33,11 @@ public final class ThreeDeadWheelLocalizer implements Localizer {
     public final Encoder par0, par1, perp;
 
     public final double inPerTick;
-
     private int lastPar0Pos, lastPar1Pos, lastPerpPos;
     private boolean initialized;
     private Pose2d pose;
 
     public ThreeDeadWheelLocalizer(HardwareMap hardwareMap, double inPerTick, Pose2d initialPose) {
-        // TODO: make sure your config has **motors** with these names (or change them)
-        //   the encoders should be plugged into the slot matching the named motor
-        //   see https://ftc-docs.firstinspires.org/en/latest/hardware_and_software_configuration/configuring/index.html
         par0 = new OverflowEncoder(new RawEncoder(hardwareMap.get(DcMotorEx.class, "par0")));
         par1 = new OverflowEncoder(new RawEncoder(hardwareMap.get(DcMotorEx.class, "par1")));
         perp = new OverflowEncoder(new RawEncoder(hardwareMap.get(DcMotorEx.class, "perp")));
@@ -82,24 +80,25 @@ public final class ThreeDeadWheelLocalizer implements Localizer {
             return new PoseVelocity2d(new Vector2d(0.0, 0.0), 0.0);
         }
 
-        int par0PosDelta = par0PosVel.position - lastPar0Pos;
-        int par1PosDelta = par1PosVel.position - lastPar1Pos;
-        int perpPosDelta = perpPosVel.position - lastPerpPos;
+        double par0PosDelta = (par0PosVel.position - lastPar0Pos) * inPerTick;
+        double par1PosDelta = (par1PosVel.position - lastPar1Pos) * inPerTick;
+        double perpPosDelta = (perpPosVel.position - lastPerpPos) * inPerTick;
 
+        double headingDelta = (par0PosDelta - par1PosDelta) / (PARAMS.par0Y - PARAMS.par1Y);
         Twist2dDual<Time> twist = new Twist2dDual<>(
                 new Vector2dDual<>(
                         new DualNum<Time>(new double[] {
-                                (PARAMS.par0YTicks * par1PosDelta - PARAMS.par1YTicks * par0PosDelta) / (PARAMS.par0YTicks - PARAMS.par1YTicks),
-                                (PARAMS.par0YTicks * par1PosVel.velocity - PARAMS.par1YTicks * par0PosVel.velocity) / (PARAMS.par0YTicks - PARAMS.par1YTicks),
+                                (PARAMS.par0Y * par1PosDelta - PARAMS.par1Y * par0PosDelta) / (PARAMS.par0Y - PARAMS.par1Y),
+                                (PARAMS.par0Y * par1PosVel.velocity - PARAMS.par1Y * par0PosVel.velocity) / (PARAMS.par0Y - PARAMS.par1Y),
                         }).times(inPerTick),
                         new DualNum<Time>(new double[] {
-                                (PARAMS.perpXTicks / (PARAMS.par0YTicks - PARAMS.par1YTicks) * (par1PosDelta - par0PosDelta) + perpPosDelta),
-                                (PARAMS.perpXTicks / (PARAMS.par0YTicks - PARAMS.par1YTicks) * (par1PosVel.velocity - par0PosVel.velocity) + perpPosVel.velocity),
+                                (PARAMS.perpX / (PARAMS.par0Y - PARAMS.par1Y) * (par1PosDelta - par0PosDelta) + perpPosDelta),
+                                (PARAMS.perpX / (PARAMS.par0Y - PARAMS.par1Y) * (par1PosVel.velocity - par0PosVel.velocity) + perpPosVel.velocity),
                         }).times(inPerTick)
                 ),
                 new DualNum<>(new double[] {
-                        (par0PosDelta - par1PosDelta) / (PARAMS.par0YTicks - PARAMS.par1YTicks),
-                        (par0PosVel.velocity - par1PosVel.velocity) / (PARAMS.par0YTicks - PARAMS.par1YTicks),
+                        headingDelta,
+                        (par0PosVel.velocity - par1PosVel.velocity) * inPerTick / (PARAMS.par0Y - PARAMS.par1Y),
                 })
         );
 

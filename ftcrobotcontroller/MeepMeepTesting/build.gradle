@@ -1,0 +1,27 @@
+plugins {
+    id 'java-library'
+    id 'org.jetbrains.kotlin.jvm'
+}
+java {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+}
+repositories {
+    maven { url = 'https://jitpack.io' }
+    maven { url = 'https://maven.brott.dev/' }
+    mavenCentral()
+}
+
+// In MeepMeepTesting/build.gradle
+
+repositories {
+    maven { url = 'https://maven.brott.dev/' }
+}
+
+dependencies {
+    implementation 'com.acmerobotics.roadrunner:MeepMeep:0.1.7'
+}
+
+kotlin {
+    jvmToolchain(17)
+}
