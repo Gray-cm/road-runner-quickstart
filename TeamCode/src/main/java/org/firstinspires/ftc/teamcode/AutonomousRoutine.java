@@ -1,5 +1,8 @@
 package org.firstinspires.ftc.teamcode;
 
+import com.acmerobotics.dashboard.FtcDashboard;
+import com.acmerobotics.dashboard.telemetry.MultipleTelemetry;
+import com.acmerobotics.dashboard.telemetry.TelemetryPacket;
 import com.acmerobotics.roadrunner.Action;
 import com.acmerobotics.roadrunner.ParallelAction;
 import com.acmerobotics.roadrunner.Pose2d;
@@ -7,8 +10,11 @@ import com.acmerobotics.roadrunner.SequentialAction;
 import com.acmerobotics.roadrunner.SleepAction;
 import com.acmerobotics.roadrunner.Vector2d;
 import com.acmerobotics.roadrunner.ftc.Actions;
+import com.acmerobotics.roadrunner.ftc.FlightRecorder;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+
+import org.firstinspires.ftc.teamcode.messages.PoseMessage;
 
 /**
  * Abstract base class for high-speed autonomous.
@@ -41,6 +47,9 @@ public abstract class AutonomousRoutine extends LinearOpMode {
 
     @Override
     public void runOpMode() {
+        // Initialize MultipleTelemetry to see logs on both Driver Station and Dashboard
+        telemetry = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
+
         intake = new Intake(hardwareMap);
         flywheel = new Flywheel(hardwareMap);
         
@@ -48,13 +57,40 @@ public abstract class AutonomousRoutine extends LinearOpMode {
         drive = new MecanumDrive(hardwareMap, startPose);
 
         // --- BACKGROUND ACTIONS ---
+        
+        // 1. Turret Tracking
         Action turretTrack = packet -> {
-            flywheel.spinning(); // Background turret tracking using tx
+            flywheel.spinning(); 
             return true; 
         };
         
+        // 2. Flywheel Velocity Control
         Action flywheelAuto = packet -> {
-            flywheel.update(flywheel.getAutoVelocity()); // Background velocity adjustment using ty
+            flywheel.update(flywheel.getAutoVelocity());
+            return true; 
+        };
+
+        // 3. Dashboard and Localization Updates (The "Fullest" Dashboard Usage)
+        // This ensures the robot stays drawn on the field even during SleepActions or scoring
+        Action dashboardUpdate = packet -> {
+            // Update pose from 3-pod odometry
+            drive.updatePoseEstimate();
+            Pose2d pose = drive.localizer.getPose();
+
+            // Draw robot on the Field Overlay
+            packet.fieldOverlay().setStroke("#3F51B5");
+            Drawing.drawRobot(packet.fieldOverlay(), pose);
+
+            // Send numeric data to the Dashboard Telemetry widget
+            packet.put("x", pose.position.x);
+            packet.put("y", pose.position.y);
+            packet.put("heading (deg)", Math.toDegrees(pose.heading.toDouble()));
+            packet.put("Flywheel Velocity", flywheel.getVelocity());
+            
+            // Log pose to Flight Recorder (Road Runner Log Viewer)
+            // Note: MecanumDrive.updatePoseEstimate() already does this, but you can add custom tags
+            FlightRecorder.write("AUTON_POSE_CUSTOM", new PoseMessage(pose));
+
             return true; 
         };
 
@@ -73,12 +109,11 @@ public abstract class AutonomousRoutine extends LinearOpMode {
         // --- INIT ---
         while (!isStarted() && !isStopRequested()) {
             intake.updatePattern();
-            // Crucial Fix: Set the goal target ID based on alliance
             flywheel.setTargetTagId(getAlliance() == Alliance.BLUE ? 20 : 21);
             
             telemetry.addData("Alliance", getAlliance());
             telemetry.addData("Pattern", intake.getDetectedPattern());
-            telemetry.addData("Turret Target ID", getAlliance() == Alliance.BLUE ? 20 : 21);
+            telemetry.addData("Status", "Ready for Start");
             telemetry.update();
         }
 
@@ -93,7 +128,6 @@ public abstract class AutonomousRoutine extends LinearOpMode {
         Vector2d firstStack, secondStack, thirdStack;
         Intake.Pattern p = intake.getDetectedPattern();
         
-        // Strategy: Intake Pixels (P) first, Green (G) last or skip
         if (p == Intake.Pattern.GPP) {
             firstStack = stack2; secondStack = stack3; thirdStack = stack1;
         } else if (p == Intake.Pattern.PGP) {
@@ -102,12 +136,10 @@ public abstract class AutonomousRoutine extends LinearOpMode {
             firstStack = stack1; secondStack = stack2; thirdStack = stack3;
         }
 
+        // --- BUILD MAIN ROUTINE ---
         Action routine = drive.actionBuilder(startPose)
-                // 1. INITIAL SHOT (Preloads)
                 .splineTo(mVec(-17, 0), mAng(180))
                 .stopAndAdd(scoreThree)
-                
-                // 2. CYCLE 1 (First Pixel)
                 .setTangent(mAng(45))
                 .afterTime(0.5, intakeOn)
                 .splineToLinearHeading(new Pose2d(firstStack, mAng(90)), mAng(90))
@@ -116,8 +148,6 @@ public abstract class AutonomousRoutine extends LinearOpMode {
                 .setTangent(mAng(225))
                 .splineToLinearHeading(mPose(-17, 12, 180), mAng(180))
                 .stopAndAdd(scoreOne)
-                
-                // 3. CYCLE 2 (Second Pixel)
                 .setTangent(mAng(45))
                 .afterTime(0.5, intakeOn)
                 .splineToLinearHeading(new Pose2d(secondStack, mAng(90)), mAng(90))
@@ -126,8 +156,6 @@ public abstract class AutonomousRoutine extends LinearOpMode {
                 .setTangent(mAng(225))
                 .splineToLinearHeading(mPose(-17, 0, 180), mAng(180))
                 .stopAndAdd(scoreOne)
-
-                // 4. HIT LEVER & RACK
                 .setTangent(mAng(90))
                 .splineToLinearHeading(mPose(0, 55, 90), mAng(90))
                 .waitSeconds(0.2)
@@ -139,8 +167,6 @@ public abstract class AutonomousRoutine extends LinearOpMode {
                 .setTangent(mAng(180))
                 .splineToLinearHeading(mPose(-17, 24, 180), mAng(180))
                 .stopAndAdd(scoreThree)
-                
-                // 5. CYCLE 3 (The Green Ball or Third Pixel)
                 .setTangent(mAng(45))
                 .afterTime(0.2, intakeOn)
                 .splineToLinearHeading(new Pose2d(thirdStack, mAng(90)), mAng(90))
@@ -149,16 +175,15 @@ public abstract class AutonomousRoutine extends LinearOpMode {
                 .setTangent(mAng(225))
                 .splineToLinearHeading(mPose(-17, 20, 180), mAng(180))
                 .stopAndAdd(scoreOne)
-                
                 .splineToLinearHeading(mPose(0, 10, 180), mAng(180))
                 .build();
 
         // --- EXECUTION ---
         Actions.runBlocking(new ParallelAction(
-                turretTrack,
-                flywheelAuto,
-                routine
+                dashboardUpdate, // Persistent dashboard/pose updates
+                turretTrack,     // Background turret logic
+                flywheelAuto,    // Background flywheel logic
+                routine          // The main driving sequence
         ));
     }
 }
-

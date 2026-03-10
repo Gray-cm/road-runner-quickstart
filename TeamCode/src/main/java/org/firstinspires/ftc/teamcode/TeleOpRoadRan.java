@@ -1,20 +1,28 @@
 package org.firstinspires.ftc.teamcode;
 
-import com.arcrobotics.ftclib.drivebase.MecanumDrive;
+import com.acmerobotics.dashboard.FtcDashboard;
+import com.acmerobotics.dashboard.telemetry.TelemetryPacket;
+import com.acmerobotics.roadrunner.Pose2d;
+import com.acmerobotics.roadrunner.ftc.FlightRecorder;
 import com.arcrobotics.ftclib.hardware.motors.Motor;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.Servo;
+
+import org.firstinspires.ftc.teamcode.messages.PoseMessage;
 
 @TeleOp(name = "TeleOp RoadRan", group = "RoadRan")
 public class TeleOpRoadRan extends OpMode {
     private Intake intake;
     private Flywheel flywheel;
     private Motor fl, fr, bl, br;
+    private Servo runner;
     private com.arcrobotics.ftclib.drivebase.MecanumDrive drive;
+    // Road Runner MecanumDrive instance for localization
+    private org.firstinspires.ftc.teamcode.MecanumDrive rrDrive;
 
     // State tracking for selection and toggles
     private String allianceStatus = "NOT SELECTED";
-    private boolean lastX = false;
 
     @Override
     public void init() {
@@ -25,8 +33,12 @@ public class TeleOpRoadRan extends OpMode {
         fr = new Motor(hardwareMap, "forwardright_motor");
         bl = new Motor(hardwareMap, "backleft_motor");
         br = new Motor(hardwareMap, "backright_motor");
+        runner = hardwareMap.get(Servo.class, "runner");
 
         drive = new com.arcrobotics.ftclib.drivebase.MecanumDrive(fl, fr, bl, br);
+        
+        // Initialize Road Runner's MecanumDrive
+        rrDrive = new org.firstinspires.ftc.teamcode.MecanumDrive(hardwareMap, new Pose2d(0, 0, 0));
     }
 
     @Override
@@ -65,39 +77,35 @@ public class TeleOpRoadRan extends OpMode {
         flywheel.update(gamepad1.right_trigger); // Power flywheel
 
         // --- INTAKE & SPINDEXER ---
-        // Intake spinner: Left Trigger
-        // Boot/Kick: Right Bumper
         intake.runIntakeAndBoot(gamepad1.left_trigger, gamepad1.right_bumper);
-
-        // Manual Spindexer Slot Control (D-Pad)
-        /*
-        if (gamepad1.dpad_up) {
-            intake.setSpindexerToSlot(1);
-        } else if (gamepad1.dpad_right) {
-            intake.setSpindexerToSlot(2);
-        } else if (gamepad1.dpad_down) {
-            intake.setSpindexerToSlot(3);
-        }*/
-
-        // Automatic Spindexer Cycle (using the sorting logic)
-        // Pressing 'X' cycles to the next best ball based on the detected pattern
-        /*if (gamepad1.x && !lastX) {
-             intake.positionNextBall();
+        if (gamepad1.left_bumper) {
+            runner.setPosition(1);
+        } else {
+            runner.setPosition(0);
         }
-        lastX = gamepad1.x;
 
-        // Reset the spindexer index or scan pattern
-        if (gamepad1.y) {
-            intake.resetScoringIndex();
-            intake.updatePattern(); // Try scanning again if it was missed
-        }
-*/
+        // --- LOCALIZATION & DASHBOARD ---
+        // Update Road Runner Pose Estimate
+        rrDrive.updatePoseEstimate();
+        Pose2d pose = rrDrive.localizer.getPose();
+
+        // Send Pose to Dashboard Field Overlay
+        TelemetryPacket packet = new TelemetryPacket();
+        packet.fieldOverlay().setStroke("#3F51B5");
+        Drawing.drawRobot(packet.fieldOverlay(), pose);
+        FtcDashboard.getInstance().sendTelemetryPacket(packet);
+
+        // --- LOGGING (Messages) ---
+        // This logs the current pose to the Flight Recorder (visible in RR Log Viewer)
+        FlightRecorder.write("TELEOP_POSE", new PoseMessage(pose));
+
         // --- TELEMETRY ---
         telemetry.addData("Alliance", allianceStatus);
         telemetry.addData("Pattern", intake.getDetectedPattern());
         telemetry.addData("Flywheel Velocity", (int)flywheel.getVelocity());
-        //telemetry.addData("Is it Green?", intake.isGreenPixel());
-        telemetry.addData("Drivetrain Power", fl.getCurrentPosition());
+        telemetry.addData("X", pose.position.x);
+        telemetry.addData("Y", pose.position.y);
+        telemetry.addData("Heading", Math.toDegrees(pose.heading.toDouble()));
         telemetry.update();
     }
 

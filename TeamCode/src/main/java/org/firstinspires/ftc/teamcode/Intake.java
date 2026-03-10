@@ -1,5 +1,7 @@
 package org.firstinspires.ftc.teamcode;
 
+import com.arcrobotics.ftclib.hardware.motors.Motor;
+import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
@@ -11,7 +13,7 @@ import com.qualcomm.robotcore.hardware.Servo;
 public class Intake {
 
     private final DcMotorEx spinner;
-    private final Servo boot;
+    private final DcMotor boot;
     private final Limelight3A limelight;
 
     private Pattern detectedPattern = Pattern.UNKNOWN;
@@ -25,7 +27,7 @@ public class Intake {
 
     public Intake(HardwareMap hwMap) {
         spinner = hwMap.get(DcMotorEx.class, "spinner");
-        boot = hwMap.get(Servo.class, "boot");
+        boot = hwMap.get(DcMotor.class, "boot");
         limelight = hwMap.get(Limelight3A.class, "limelight");
         
         spinner.setDirection(DcMotorSimple.Direction.REVERSE);
@@ -44,13 +46,13 @@ public class Intake {
             for (LLResultTypes.FiducialResult fr : result.getFiducialResults()) {
                 int id = fr.getFiducialId();
                 // ONLY look for pattern tags 1, 2, and 3 to avoid goal conflicts
-                if (id == 1) {
+                if (id == 21) {
                     setPattern(Pattern.GPP);
                     break;
-                } else if (id == 2) {
+                } else if (id == 22) {
                     setPattern(Pattern.PGP);
                     break;
-                } else if (id == 3) {
+                } else if (id == 23) {
                     setPattern(Pattern.PPG);
                     break;
                 }
@@ -65,7 +67,12 @@ public class Intake {
     public void runIntakeAndBoot(double intakePower, boolean kick) {
         spinner.setPower(intakePower);
         // Kick logic
-        boot.setPosition(kick ? 1.0 : 0.5);
+        if(kick){
+            boot.setPower(-1);
+        }
+        else{
+            boot.setPower(0);
+        }
     }
 
     public Pattern getDetectedPattern() { return detectedPattern; }
