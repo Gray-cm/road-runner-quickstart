@@ -20,6 +20,7 @@ public class TeleOpRoadRan extends OpMode {
     private com.arcrobotics.ftclib.drivebase.MecanumDrive drive;
     // Road Runner MecanumDrive instance for localization
     private org.firstinspires.ftc.teamcode.MecanumDrive rrDrive;
+    private Drivetrain driver;
 
     // State tracking for selection and toggles
     private String allianceStatus = "NOT SELECTED";
@@ -34,11 +35,14 @@ public class TeleOpRoadRan extends OpMode {
         bl = new Motor(hardwareMap, "backleft_motor");
         br = new Motor(hardwareMap, "backright_motor");
         runner = hardwareMap.get(Servo.class, "runner");
-
         drive = new com.arcrobotics.ftclib.drivebase.MecanumDrive(fl, fr, bl, br);
-        
-        // Initialize Road Runner's MecanumDrive
-        rrDrive = new org.firstinspires.ftc.teamcode.MecanumDrive(hardwareMap, new Pose2d(0, 0, 0));
+        driver = new Drivetrain(hardwareMap);
+        fr.setInverted(true);
+        br.setInverted(true);
+        bl.setInverted(true);
+
+                // Initialize Road Runner's MecanumDrive
+        rrDrive = new org.firstinspires.ftc.teamcode.MecanumDrive(hardwareMap, new Pose2d(60, 0, 0));
     }
 
     @Override
@@ -57,6 +61,7 @@ public class TeleOpRoadRan extends OpMode {
 
         telemetry.addData("Selection", allianceStatus);
         telemetry.addData("Detected Pattern", intake.getDetectedPattern());
+        telemetry.addData("Voltage", "%.2fV", intake.getVoltage());
         telemetry.addData("Status", "A: Blue, B: Red | Ready to Start");
         telemetry.update();
     }
@@ -64,25 +69,42 @@ public class TeleOpRoadRan extends OpMode {
     @Override
     public void loop() {
         intake.updatePattern();
+        
         // --- DRIVETRAIN ---
+
         if (drive != null) {
             drive.driveRobotCentric(
-                    gamepad1.right_stick_x,
-                    -gamepad1.left_stick_y,
-                    gamepad1.left_stick_x);
+                    -gamepad1.left_stick_x, // strafe
+                    gamepad1.left_stick_y, // forward
+                    -gamepad1.right_stick_x); //turn
         }
 
         // --- FLYWHEEL & TURRET ---
         flywheel.spinning(); // Auto-aim turret
-        flywheel.update(gamepad1.right_trigger); // Power flywheel
+        if(gamepad1.right_trigger > 0.2){
+            flywheel.autoShoot();
+        }// Power flywheel
+        else{
+            flywheel.update(0);
+        }
 
         // --- INTAKE & SPINDEXER ---
-        intake.runIntakeAndBoot(gamepad1.left_trigger, gamepad1.right_bumper);
-        if (gamepad1.left_bumper) {
-            runner.setPosition(1);
-        } else {
+        // Right bumper controls the "kick" for the boot
+        intake.runIntakeAndBoot(gamepad1.left_trigger, gamepad1.left_bumper);
+        if(gamepad1.dpad_down){
+            intake.runIntakeAndBoot(-1,false);
+        }
+
+        
+        // --- SERVO RUNNER (Hold Example) ---
+        intake.runit(gamepad1.right_bumper);
+        /*if (gamepad1.right_bumper) {
+            runner.setPosition(0.4);
+        }
+        else{
             runner.setPosition(0);
         }
+*/
 
         // --- LOCALIZATION & DASHBOARD ---
         // Update Road Runner Pose Estimate
@@ -96,13 +118,14 @@ public class TeleOpRoadRan extends OpMode {
         FtcDashboard.getInstance().sendTelemetryPacket(packet);
 
         // --- LOGGING (Messages) ---
-        // This logs the current pose to the Flight Recorder (visible in RR Log Viewer)
         FlightRecorder.write("TELEOP_POSE", new PoseMessage(pose));
 
         // --- TELEMETRY ---
         telemetry.addData("Alliance", allianceStatus);
         telemetry.addData("Pattern", intake.getDetectedPattern());
         telemetry.addData("Flywheel Velocity", (int)flywheel.getVelocity());
+        telemetry.addData("Boot Power", "%.2f", intake.getBootPower());
+        telemetry.addData("Voltage", "%.2fV", intake.getVoltage());
         telemetry.addData("X", pose.position.x);
         telemetry.addData("Y", pose.position.y);
         telemetry.addData("Heading", Math.toDegrees(pose.heading.toDouble()));
@@ -117,5 +140,7 @@ public class TeleOpRoadRan extends OpMode {
             bl.stopMotor();
             br.stopMotor();
         }
+        intake.stopp();
+        flywheel.stopp();
     }
 }

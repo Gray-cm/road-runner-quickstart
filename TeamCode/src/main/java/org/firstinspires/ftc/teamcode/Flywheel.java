@@ -10,16 +10,16 @@ import com.qualcomm.robotcore.hardware.CRServo;
 
 public class Flywheel {
     // Flywheel PIDF Constants
-    private final double kp = 0.255;
-    private final double ki = 0.18;
-    private final double kd = 0.25;
-    private final double kf = 0.10;
-    
-    // Turret PID Constants (for alignment using tx)
-    private final double kpi = 0.045; // Increased gain for better response
-    private final double kii = 0.001;
-    private final double kdi = 0.002;
+    private final double kp = 0.655;
+    private final double ki = 0.35;
+    private final double kd = 0.05;
+    private final double kf = 0.20;
 
+    // Turret PID Constants (for alignment using tx)
+    private final double kpi = 0.065; // Increased gain for better response //Originally 0.045
+    private final double kii = 0.001;
+    private final double kdi = 0.005; // originally 0.002
+    private final double kStaticTurret = 0.08;
     private final DcMotorEx shoot1;
     private final DcMotorEx shoot2;
     private final CRServo spin;
@@ -28,7 +28,6 @@ public class Flywheel {
     private final PIDFController turretPID;
 
     private int targetTagId = -1;
-
     public Flywheel(HardwareMap hardwareMap) {
         shoot1 = hardwareMap.get(DcMotorEx.class, "Shoot1");
         shoot2 = hardwareMap.get(DcMotorEx.class, "Shoot2");
@@ -80,15 +79,20 @@ public class Flywheel {
     /**
      * spinning() solely controls the TURRET direction using tx.
      */
+    private LLResult lastResult; // Add this as a global variable in the class
+
+    public void updateLimelightData() {
+        lastResult = limelight.getLatestResult();
+    }
     public void spinning() {
-        LLResult result = limelight.getLatestResult();
-        if (result != null && result.isValid()) {
+        updateLimelightData();
+        if (lastResult != null && lastResult.isValid()) {
             double tx = 0;
             boolean found = false;
 
             // Search for specific target ID if set
             if (targetTagId != -1) {
-                for (LLResultTypes.FiducialResult fiducial : result.getFiducialResults()) {
+                for (LLResultTypes.FiducialResult fiducial : lastResult.getFiducialResults()) {
                     if (fiducial.getFiducialId() == targetTagId) {
                         tx = fiducial.getTargetXDegrees();
                         found = true;
@@ -97,16 +101,18 @@ public class Flywheel {
                 }
             } else {
                 // Fallback to primary result if no specific ID target
-                tx = result.getTx();
+                tx = lastResult.getTx();
                 found = true;
             }
 
             if (found) {
+                double setpoint = 5;
                 // Aim to center the turret (tx = 0)
-                double spinPower = turretPID.calculate(tx, 0);
+                double spinPower = turretPID.calculate(tx, setpoint); // the second argument is for offset, 0 for perfect alignment of the limelight and code.negative for right offset and positive for left offset
+                if (Math.abs(setpoint - tx) > 0.5) {
+                    spinPower += Math.signum(spinPower) * kStaticTurret;
+                }
                 spin.setPower(spinPower);
-            } else {
-                spin.setPower(0);
             }
         } else {
             spin.setPower(0);
@@ -137,7 +143,7 @@ public class Flywheel {
 
             if (found) {
                 // Tuning required: Map vertical offset (distance) to velocity
-                return 2100 + (ty * -12);
+                return 3500 + (ty * -100);
             }
         }
         return 2000; // Default safety velocity
@@ -149,5 +155,8 @@ public class Flywheel {
 
     public double getVelocity() {
         return shoot1.getVelocity();
+    }
+    public void stopp(){
+        limelight.close();
     }
 }

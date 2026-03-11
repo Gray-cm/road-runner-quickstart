@@ -13,6 +13,7 @@ import com.acmerobotics.roadrunner.ftc.Actions;
 import com.acmerobotics.roadrunner.ftc.FlightRecorder;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+import com.qualcomm.robotcore.hardware.Servo;
 
 import org.firstinspires.ftc.teamcode.messages.PoseMessage;
 
@@ -67,14 +68,27 @@ public abstract class AutonomousRoutine extends LinearOpMode {
         // 2. Flywheel Velocity Control
         Action flywheelAuto = packet -> {
             flywheel.update(flywheel.getAutoVelocity());
-            return true; 
+            return true;
         };
-
+        Action subsystem = packet -> {
+            flywheel.spinning();
+            flywheel.update(flywheel.getAutoVelocity());
+            return true;
+        };
+        Action Kick = packet -> {
+            intake.runit(true);
+            intake.runIntakeAndBoot(1,true);
+          return false;
+        };
+        Action take = telemetryPacket -> {
+            intake.runIntakeAndBoot(1,true);
+          return false;
+        };
         // 3. Dashboard and Localization Updates (The "Fullest" Dashboard Usage)
         // This ensures the robot stays drawn on the field even during SleepActions or scoring
         Action dashboardUpdate = packet -> {
             // Update pose from 3-pod odometry
-            drive.updatePoseEstimate();
+            //drive.updatePoseEstimate();
             Pose2d pose = drive.localizer.getPose();
 
             // Draw robot on the Field Overlay
@@ -181,8 +195,7 @@ public abstract class AutonomousRoutine extends LinearOpMode {
         // --- EXECUTION ---
         Actions.runBlocking(new ParallelAction(
                 dashboardUpdate, // Persistent dashboard/pose updates
-                turretTrack,     // Background turret logic
-                flywheelAuto,    // Background flywheel logic
+                new ParallelAction(Kick,subsystem),    // Background flywheel logic
                 routine          // The main driving sequence
         ));
     }

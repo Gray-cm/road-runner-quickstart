@@ -46,7 +46,7 @@ public class Drivetrain {
     public void drive(double power, double strafe, double turn){
         double flTarget = power + strafe + turn;
         double frTarget = power - strafe - turn;
-        double blTarget = power - strafe + turn;
+        double blTarget = power - (0.5)*strafe + turn;
         double brTarget = power + strafe - turn;
         
         fl.setPower(flPIDF.calculate(getFLVelocity(), flTarget));
@@ -62,7 +62,7 @@ public class Drivetrain {
         TrapezoidProfile profile = new TrapezoidProfile(constraints, goal, init);
         
         double kP = 0.05;
-        double kI = 0.001;
+        double kI = 0.0;
         double kD = 0.025;
         ProfiledPIDController controller = new ProfiledPIDController(kP,kI,kD,constraints);
         
